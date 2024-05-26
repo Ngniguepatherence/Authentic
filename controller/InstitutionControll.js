@@ -2,6 +2,7 @@ const Institution = require('../models/Institutions');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
+const crypto = require('crypto');
 
 const  User = require('../models/User');
 
@@ -17,12 +18,19 @@ const InstitutionController = {
                 return res.status(400).json({msg: 'Institution already exists'});
             }
 
+            const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', {
+                namedCurve: 'secp256k1', // Utilisation de la courbe elliptique secp256k1
+                publicKeyEncoding: { type: 'spki', format: 'pem' },
+                privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+              });
             institution = new Institution({
                 name: name, 
                 address: address,
                 boitepostal: bp,
                 tel:tel,
                 email: email,
+                publicKey: publicKey,
+                privateKey: privateKey,
                 website: website,
                 password:password,
 
@@ -77,10 +85,14 @@ const InstitutionController = {
             if(!institution){
                 return res.status(400).json({msg: 'Institution not found'});
             }
-
+            const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', {
+                namedCurve: 'secp256k1', // Utilisation de la courbe elliptique secp256k1
+                publicKeyEncoding: { type: 'spki', format: 'pem' },
+                privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+              });
             console.log(institution.name);
 
-            user = new User({ institution: institution.id, name,email,password, role});
+            user = new User({ institution: institution.id, name,email,publicKey: publicKey,privateKey: privateKey,password, role});
             const salt = await bcrypt.genSalt(10);
             user.password = await bcrypt.hash(password, salt);
 
@@ -90,6 +102,27 @@ const InstitutionController = {
             console.error(err.message);
             res.status(500).send('Server error');
         }
+    },
+    getInstitution: async(req,res) => {
+        try{
+            const institutions = await Institution.find();
+            res.json(institutions);
+        }
+        catch(err) {
+            res.status(500).send('Server error');
+        }
+    },
+    getInstitutionId: async(req,res) => {
+        try{
+            const {id} = req.params;
+            const institution = await Institution.findById(id);
+            res.json(institution);
+        }catch(err) {
+            res.status(500).send('Error during geting institution');
+        }
+    },
+    logout: async(req,res) => {
+        
     }
 };
 

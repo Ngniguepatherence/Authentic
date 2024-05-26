@@ -6,8 +6,10 @@ const institutionSchema = new mongoose.Schema({
     boitepostal: {type: String, require: true},
     tel: {type: String, require: true},
     email: {type: String, require:true},
+    headerName: {type: String, require: true},
     website: {type: String, require: true},
-    responsable: {type: String, require: true},
+    publicKey: { type: String, required: true },
+    privateKey: { type: String, required: true },
     password: {type: String, require:true},
     createAt: {type:Date, default: Date.now}
 });

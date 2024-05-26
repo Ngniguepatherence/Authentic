@@ -3,7 +3,6 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const crypto = require('crypto');
-
 const  User = require('../models/User');
 
 const secret = process.env.SECRET;
@@ -122,7 +121,14 @@ const InstitutionController = {
         }
     },
     logout: async(req,res) => {
-        
+         // Effacer le cookie ou le localStorage
+    res.clearCookie('jwt'); // Si vous utilisez des cookies
+    // Ou
+    res.clearCookie('token', { path: '/' }); // Si vous utilisez des cookies avec un chemin spécifique
+    // Ou
+    localStorage.removeItem('token'); // Si vous utilisez localStorage
+
+    res.json({ msg: 'Logged out successfully' });
     }
 };
 

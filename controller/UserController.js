@@ -12,14 +12,11 @@ const secret = process.env.SECRET;
 const UserController = {
     register: async(req,res) => {
         const {fid, name, email,password,role} = req.body;
-        console.log("1");
         try{
-            console.log("2");
             let user = await User.findOne({email});
             if(user){
                 return res.status(400).json({msg: "User already exits"});
             }
-            console.log(fid);
             const institution = await Institution.findById(fid);
             if(!institution){
                 return res.status(400).json({msg: 'Institution not found'});

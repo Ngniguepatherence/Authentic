@@ -1,4 +1,5 @@
 const express = require('express')
+const bodyParser = require('body-parser');
 require('dotenv').config();
 const InstitutionRoute = require('./router/InstitutionRoute');
 const cors = require('cors');
@@ -17,7 +18,9 @@ const corsOptions = {
   
 app.use(cors(corsOptions));
 app.use(express.json());
-  
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
 
 app.use('/api/institutions',InstitutionRoute)
 

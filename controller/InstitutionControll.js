@@ -94,6 +94,18 @@ const InstitutionController = {
             res.status(500).send('Server error');
         }
     },
+
+    logout: async (req, res) => {
+        try {
+          req.session.destroy();
+      
+          res.json({ msg: 'Logout successful' });
+        } catch (err) {
+          console.error(err.message);
+          res.status(500).send('Server error');
+        }
+      },
+
     registerUser: async(req,res) => {
         const {name, email,password,role} = req.body;
 

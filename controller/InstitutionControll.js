@@ -60,6 +60,17 @@ const InstitutionController = {
         }
     },
 
+    listInstitution: async (req, res) => {
+        try {
+          const institutions = await Institution.find();
+          res.json({institutions});
+
+        } catch (err) {
+          console.error(err.message);
+          res.status(500).send('Server error');
+        }
+      },
+
     login: async(req,res) => {
         const { email, password} = req.body;
         try {

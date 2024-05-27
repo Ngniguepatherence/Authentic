@@ -3,7 +3,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const crypto = require('crypto');
-const  User = require('../models/User');
+const User = require('../models/User');
 
 const secret = process.env.SECRET;
 
@@ -51,21 +51,56 @@ const InstitutionController = {
     },
 
     login: async(req,res) => {
+        const { email, password } = req.body;
+        try {
+            // Rechercher l'utilisateur dans les deux collections
+            let institution = await Institution.findOne({ email });
+            let user = await User.findOne({ email });
+            let entity = institution || user;
+            let entityType = institution ? 'institution' : 'user';
+
+            if (!entity) {
+            return res.status(400).json({ msg: 'Invalid Credentials' });
+            }
+
+            const isMatch = await bcrypt.compare(password, entity.password);
+            if (!isMatch) {
+            return res.status(400).json({ msg: 'Invalid Credentials' });
+            }
+
+            const payload = {
+            user: {
+                id: entity.id,
+                type: entityType,
+                name: entity.name, // Ajoutez d'autres informations nécessaires
+            },
+            };
+
+            jwt.sign(payload, secret, { expiresIn: 360000 }, (err, token) => {
+            if (err) throw err;
+            res.json({ token, user: payload.user });
+            });
+        } catch (err) {
+            console.error(err.message);
+            res.status(500).send('Server error');
+        }
+    },
+    loginUser: async(req,res) => {
         const { email, password} = req.body;
         try {
-            let institution = await Institution.findOne({email});
-            if(!institution) {
+            let user = await User.findOne({email});
+            if(!user) {
                 return res.status(400).json({msg: 'Invalid Credentials'});
             }
 
-            const isMatch = await bcrypt.compare(password, institution.password);
+            const isMatch = await bcrypt.compare(password, user.password);
             if(!isMatch){
                 return res.status(400).json({msg: 'Invalid Credentials'});
             }
-            const payload = { user: { id: institution.id, type: 'institution'}};
+            const payload = { user: { id: user.id, type: 'user'}};
             jwt.sign(payload, secret, {expiresIn: 360000 }, (err, token) => {
                 if(err) throw err;
-                res.json({token});
+                res.json({token,user});
             });
         }
         catch(err) {

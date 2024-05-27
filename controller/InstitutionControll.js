@@ -10,7 +10,7 @@ const secret = process.env.SECRET;
 
 const InstitutionController = {
     register: async (req,res) => {
-        const {name, address,bp,tel,email,website,password} = req.body;
+        const {name, address,bp,tel,email,headerName,website,password} = req.body;
         try {
             let institution = await Institution.findOne({email});
             if (institution) {
@@ -28,6 +28,7 @@ const InstitutionController = {
                 boitepostal: bp,
                 tel:tel,
                 email: email,
+                headerName: headerName,
                 publicKey: publicKey,
                 privateKey: privateKey,
                 website: website,

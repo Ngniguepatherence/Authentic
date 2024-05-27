@@ -3,7 +3,7 @@ const Schema = mongoose.Schema;
 
 const DocumentSchema = new Schema({
   institution: { type: Schema.Types.ObjectId, ref: 'Institution', required: true },
-  StaffName: { type: Schema.Types.ObjectId, ref: 'User', required: true},
+  StaffName: { type: String, required: true},
   fileType: { type: String, required: true},
   content: { type: String, required: true },
   signature: { type: String, required: true },

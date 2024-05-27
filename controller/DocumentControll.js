@@ -2,31 +2,56 @@ const crypto = require('crypto');
 const Document = require('../models/document');
 const Institution = require('../models/Institutions');
 const User = require('../models/User');
-const { PDFDocument, rgb } = require('pdf-lib');
+const { PDFDocument, Image } = require('pdf-lib');
 const QRCode = require('qrcode');
 const fs = require('fs');
-
+const path = require('path');
 
 const generatePdfWithQRCode = async (pdfBytes, qrCodeData) => {
-    const pdfDoc = await PDFDocument.load(pdfBytes);
-    const qrCodeImage = await QRCode.toDataURL(qrCodeData);
-    const qrCodeImageBytes = Buffer.from(qrCodeImage.split('base64,')[1], 'base64');
-    
-    const page = pdfDoc.addPage();
-    const { width, height } = page.getSize();
-    const qrCodeImageDims = 100; // Taille de l'image QR code
-    
-    // Intégrer l'image QR code dans le document PDF
-    page.drawImage(qrCodeImageBytes, {
-      x: width - qrCodeImageDims - 50,
-      y: height - qrCodeImageDims - 50,
-      width: qrCodeImageDims,
-      height: qrCodeImageDims,
+  const pdfDoc = await PDFDocument.load(pdfBytes);
+
+  // Générer et sauvegarder le code QR sous forme d'image
+  const qrCodeImagePath = 'qr_code.png'; // Chemin où sauvegarder l'image
+  await generateQRCodeImage(qrCodeData, qrCodeImagePath);
+
+  // Charger l'image du code QR
+  const qrCodeImageBytes = fs.readFileSync(qrCodeImagePath);
+
+  // Récupérer la première page du PDF
+  const firstPage = pdfDoc.getPages()[0];
+  const { width: pageWidth, height: pageHeight } = firstPage.getSize();
+  const qrCodeImageDims = 100; // Taille de l'image QR code
+
+  // Intégrer l'image QR code en tête de page
+  firstPage.drawImage(qrCodeImageBytes, {
+    x: 50, // Définissez la position X selon vos besoins
+    y: pageHeight - qrCodeImageDims - 50, // Définissez la position Y selon vos besoins
+    width: qrCodeImageDims,
+    height: qrCodeImageDims,
+  });
+
+  const modifiedPdfBytes = await pdfDoc.save();
+  return modifiedPdfBytes;
+};
+
+  const saveFile = async(fileBytes, filePath) => {
+    return new Promise((resolve, rejects)=> {
+      fs.writeFile(filePath, fileBytes, (err) => {
+        if(err) {
+          reject(err);
+        }else {
+          resolve();
+        }
+      });
     });
-    
-    const modifiedPdfBytes = await pdfDoc.save();
-    return modifiedPdfBytes;
   };
+
+  const saveSignedFile = async (fileBytes, fileName) => {
+    const filePath = `../uploads/${fileName}`; // Spécifiez le chemin où vous souhaitez enregistrer le fichier
+    await saveFile(fileBytes, filePath);
+    return filePath;
+  };
+  
 // Sign Document
 const DocumentController = {
     SignDocument: async(req,res) => {
@@ -47,6 +72,7 @@ const DocumentController = {
             const document = new Document({
                 institution: institution.id,
                 StaffName: institution.headerName,
+                fileType: 'pdf',
                 content,
                 signature
             });
@@ -82,10 +108,23 @@ const DocumentController = {
             const sign = crypto.createSign('SHA256');
             sign.update(hash);
             sign.end
-
+            
             const signature = sign.sign(institution.privateKey,'hex');
             const qrData = JSON.stringify({hash,signature});
-            const qrCodeImage = await QRCode.toDataURL(qrData);
+            const buffer = await QRCode.toBuffer(qrData,{ errorCorrectionLevel: 'H'});
+            
+            const pdfDoc = await PDFDocument.load(pdfBuffer);
+            
+            const qrCodeImagePath = path.join(__dirname, `../uploads/${req.file.name}_qr.png`); // Adjust path as needed
+            await fs.promises.writeFile(qrCodeImagePath, buffer);
+            
+            
+            const firstPage = pdfDoc.getPages()[0];
+        
+            // Save modified PDF with a new name
+            const pdfbites = await pdfDoc.save();
+            fs.writeFileSync(`${path.basename(`${req.file.name}-signed.pdf`)}`,pdfbites);
+
 
             const file = new Document({
                 institution: institution.id,
@@ -95,14 +134,7 @@ const DocumentController = {
                 signature
             });
             await file.save();
-            const signedPdfWithQRCode = await generatePdfWithQRCode(file.content, qrCodeImage);
-
-            res.set({
-                'Content-Type':'application/pdf',
-                'Content-Disposition': 'attachment; filename="signed_documentWQR.pdf"',
-            });
-
-            res.send(signedPdfWithQRCode);
+            res.json({msg: qrCodeImagePath})
         }
         catch(err) {
             console.error(err.message);
@@ -164,7 +196,7 @@ const DocumentController = {
             sign.end();
 
             const signature = sign.sign(institution.privateKey, 'hex');
-            const file = new Document({institution: institution.id, fileType: req.file.mimetype.split('/')[1],content: fileBuffer, signature});
+            const file = new Document({institution: institution.id,StaffName: institution.headerName, fileType: req.file.mimetype.split('/')[1],content: fileBuffer, signature});
             await file.save();
 
             res.json({ fileId: Document.id, signature});

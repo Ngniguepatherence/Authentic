@@ -55,7 +55,7 @@ const generatePdfWithQRCode = async (pdfBytes, qrCodeData) => {
 // Sign Document
 const DocumentController = {
     SignDocument: async(req,res) => {
-        const { content } = req.body;
+        const  content  = req.file;
 
         try {
             const institution = await Institution.findById(req.user.id);

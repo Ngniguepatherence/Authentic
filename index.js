@@ -5,6 +5,7 @@ const InstitutionRoute = require('./router/InstitutionRoute');
 const UserRoute = require('./router/UserRoute');
 const cors = require('cors');
 const DocumentRoute = require('./router/DocumentRoutes');
+const AdminRoute = require('./router/AdminRoutes');
 const PORT = process.env.PORT || 5000;
 const connectDB = require('./models/db');
 const app  = express();
@@ -25,6 +26,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/institutions',InstitutionRoute);
 app.use('/api/doc',DocumentRoute);
 app.use('/api/user',UserRoute);
+app.use('/api/admin', AdminRoute);
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

@@ -32,13 +32,14 @@ const InstitutionController = {
                 publicKey: publicKey,
                 privateKey: privateKey,
                 website: website,
+                responsable: responsable,
                 password:password,
 
             });
             const salt = await bcrypt.genSalt(10);
             institution.password = await bcrypt.hash(req.body.password,salt);
             await institution.save();
-
+            
             const payload = { user: {id: institution.id, type: 'institution'}};
             jwt.sign(payload,secret, {expiresIn: 360000 }, (err,token) => {
                 if(err) throw err;
@@ -49,6 +50,34 @@ const InstitutionController = {
             res.status(500).send('Server error');
         }
     },
+
+    deleteInstitution: async (req, res) => {
+        const institutionId  = req.body;
+  
+        try {
+            let deletedInstitution = await Institution.findByIdAndDelete(institutionId);
+  
+            if (!deletedInstitution) {
+                return res.status(404).json({ msg: 'Institution not found' });
+             }
+  
+            res.json({ msg: 'Institution deleted successfully' });
+        } catch (err) {
+            console.error(err.message);
+            res.status(500).send('Server error');
+        }
+    },
+
+    listInstitution: async (req, res) => {
+        try {
+          const institutions = await Institution.find();
+          res.json({institutions});
+
+        } catch (err) {
+          console.error(err.message);
+          res.status(500).send('Server error');
+        }
+      },
 
     login: async(req,res) => {
         const { email, password } = req.body;
@@ -108,6 +137,18 @@ const InstitutionController = {
             res.status(500).send('Server error');
         }
     },
+
+    logout: async (req, res) => {
+        try {
+          req.session.destroy();
+      
+          res.json({ msg: 'Logout successful' });
+        } catch (err) {
+          console.error(err.message);
+          res.status(500).send('Server error');
+        }
+      },
+
     registerUser: async(req,res) => {
         const {name, email,password,role} = req.body;
 

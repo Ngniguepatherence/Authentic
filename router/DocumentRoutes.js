@@ -4,8 +4,8 @@ const multer = require('multer');
 const auth = require('../middleware/auth');
 const DocumentC = require('../controller/DocumentControll');
 
-const upload = multer();
 
+const upload = multer({dest:'uploads/'});
 
 router.post('/sign', auth,upload.single('file'),DocumentC.SignDocument);
 router.post('/signfile', auth,upload.single('file'),DocumentC.signFile);

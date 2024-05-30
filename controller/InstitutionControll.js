@@ -32,7 +32,6 @@ const InstitutionController = {
                 publicKey: publicKey,
                 privateKey: privateKey,
                 website: website,
-                responsable: responsable,
                 password:password,
 
             });
@@ -67,17 +66,6 @@ const InstitutionController = {
             res.status(500).send('Server error');
         }
     },
-
-    listInstitution: async (req, res) => {
-        try {
-          const institutions = await Institution.find();
-          res.json({institutions});
-
-        } catch (err) {
-          console.error(err.message);
-          res.status(500).send('Server error');
-        }
-      },
 
     login: async(req,res) => {
         const { email, password } = req.body;

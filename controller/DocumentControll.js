@@ -102,7 +102,7 @@ const DocumentController = {
                 return res.status(400).json({msg:'Institution not found'});
             }
 
-            const pdfBuffer = req.file.buffer;
+            const pdfBuffer = fs.readFileSync(req.file.path);
             const hash = crypto.createHash('sha256').update(pdfBuffer).digest('hex');
 
             const sign = crypto.createSign('SHA256');
@@ -115,7 +115,7 @@ const DocumentController = {
             
             const pdfDoc = await PDFDocument.load(pdfBuffer);
             
-            const qrCodeImagePath = path.join(__dirname, `../uploads/${req.file.name}_qr.png`); // Adjust path as needed
+            const qrCodeImagePath = path.join(__dirname, `../uploads/${req.file.filename}_qr.png`); // Adjust path as needed
             await fs.promises.writeFile(qrCodeImagePath, buffer);
             
             
@@ -123,7 +123,7 @@ const DocumentController = {
         
             // Save modified PDF with a new name
             const pdfbites = await pdfDoc.save();
-            fs.writeFileSync(`${path.basename(`${req.file.name}-signed.pdf`)}`,pdfbites);
+            fs.writeFileSync(`${path.basename(`${req.file.filename}-signed.pdf`)}`,pdfbites);
 
 
             const file = new Document({
@@ -182,13 +182,14 @@ const DocumentController = {
         }
       },
     signFile: async(req,res) => {
-        try {
+        // try {
             const institution = await Institution.findById(req.user.id);
             if(!institution) {
                 return res.status(400).json({msg: 'Institution not found'});
             }
-
-            const fileBuffer = req.file.buffer;
+            console.log(req.file);
+            const fileBuffer = fs.readFileSync(req.file.path);
+            console.log(fileBuffer);
             const hash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
             const sign = crypto.createSign('SHA256');
@@ -200,11 +201,11 @@ const DocumentController = {
             await file.save();
 
             res.json({ fileId: Document.id, signature});
-        }
-        catch(err) {
-            console.error(err.message);
-            res.status(500).send('Server error');
-        }
+        // }
+        // catch(err) {
+        //     console.error(err.message);
+        //     res.status(500).send('Server error');
+        // }
     },
     VerifyFile: async(req,res) => {
         const { fileId } = req.body;

@@ -2,7 +2,6 @@ const express = require('express')
 const bodyParser = require('body-parser');
 require('dotenv').config();
 const InstitutionRoute = require('./router/InstitutionRoute');
-const UserRoute = require('./router/UserRoute');
 const cors = require('cors');
 const DocumentRoute = require('./router/DocumentRoutes');
 const AdminRoute = require('./router/AdminRoutes');
@@ -25,7 +24,6 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use('/api/institutions',InstitutionRoute);
 app.use('/api/doc',DocumentRoute);
-app.use('/api/user',UserRoute);
 app.use('/api/admin', AdminRoute);
 
 app.listen(PORT, () => {

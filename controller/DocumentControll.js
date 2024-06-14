@@ -58,37 +58,48 @@ const DocumentController = {
   SignDocument: async (req, res) => {
     console.log(req.file);
 
-    const content = req.file;
+      const content = req.file; 
 
+        try {
+            const institution = await Institution.findById(req.user.id);
+            if(!institution) {
+                return res.status(400).json({msg: 'Institution not found'});
+            }
 
-    try {
-      const institution = await Institution.findById(req.user.id);
-      if (!institution) {
-        return res.status(400).json({ msg: 'Institution not found' });
-      }
+            const sign = crypto.createSign('SHA256');
+            sign.update(content);
+            sign.end();
 
-      const sign = crypto.createSign('SHA256');
-      sign.update(content);
-      sign.end();
+            const signature = sign.sign(institution.privateKey, 'hex');
 
-      const signature = sign.sign(institution.privateKey, 'hex');
+            const document = new Document({
+                institution: institution.id,
+                StaffName: institution.headerName,
+                fileType: 'pdf',
+                content,
+                signature
+            });
+            await document.save();
 
-      const document = new Document({
-        institution: institution.id,
-        StaffName: institution.headerName,
-        fileType: 'pdf',
-        content,
-        signature
-      });
-      await document.save();
+            res.json(document);
 
-      res.json(document);
+        }catch(err) {
+            console.error(err.message);
+            res.status(500).send('Error during Signing of Data');
+        }
+    },
+    getDocuments: async(req,res) => {
+        try {
+            const documents = await Document.find({institution: req.user.id});
+            res.json(documents);
+        }catch(err) {
+            console.error(err.message);
+            res.status(500).send('Server error');
+        }
+    },
+    // Sign a pdf file
+  
 
-    } catch (err) {
-      console.error(err.message);
-      res.status(500).send('Error during Signing of Data');
-    }
-  },
   getDocuments: async (req, res) => {
     try {
       const documents = await Document.find({ institution: req.user.id }) .select('StaffName fileType  signature createdAt location title');

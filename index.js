@@ -2,8 +2,11 @@ const express = require('express')
 const bodyParser = require('body-parser');
 require('dotenv').config();
 const InstitutionRoute = require('./router/InstitutionRoute');
+<<<<<<< HEAD
 const UserRoute = require('./router/UserRoute');
 const StatRoute = require('./router/StatRoute');
+=======
+>>>>>>> refs/remotes/origin/main
 const cors = require('cors');
 const DocumentRoute = require('./router/DocumentRoutes');
 const AdminRoute = require('./router/AdminRoutes');
@@ -26,7 +29,6 @@ app.use(express.urlencoded({ extended: true }));
 // /number/users/institution/:id
 app.use('/api/institutions',InstitutionRoute);
 app.use('/api/doc',DocumentRoute);
-app.use('/api/user',UserRoute);
 app.use('/api/admin', AdminRoute);
 app.use('/api/stat', StatRoute);
 

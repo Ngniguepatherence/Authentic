@@ -2,11 +2,10 @@ const crypto = require('crypto');
 const Document = require('../models/document');
 const Institution = require('../models/Institutions');
 const User = require('../models/User');
-const { PDFDocument, Image } = require('pdf-lib');
+const { PDFDocument} = require('pdf-lib');
 const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
-const { log } = require('console');
 
 const generatePdfWithQRCode = async (pdfBytes, qrCodeData) => {
   const pdfDoc = await PDFDocument.load(pdfBytes);

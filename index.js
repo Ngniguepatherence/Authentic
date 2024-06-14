@@ -2,17 +2,15 @@ const express = require('express')
 const bodyParser = require('body-parser');
 require('dotenv').config();
 const InstitutionRoute = require('./router/InstitutionRoute');
-<<<<<<< HEAD
 const UserRoute = require('./router/UserRoute');
 const StatRoute = require('./router/StatRoute');
-=======
->>>>>>> refs/remotes/origin/main
 const cors = require('cors');
 const DocumentRoute = require('./router/DocumentRoutes');
 const AdminRoute = require('./router/AdminRoutes');
 const PORT = process.env.PORT || 5000;
 const connectDB = require('./models/db');
 const app  = express();
+const path = require('path');
 
 connectDB()
 
@@ -27,6 +25,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // /number/users/institution/:id
+app.use('/api/files',express.static(path.join(__dirname, '/uploads')));
+
 app.use('/api/institutions',InstitutionRoute);
 app.use('/api/doc',DocumentRoute);
 app.use('/api/admin', AdminRoute);

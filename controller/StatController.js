@@ -31,6 +31,17 @@ const StatController = {
         }
       },
 
+      getTotalUsersPerInstitution: async (req, res) => {
+        try {
+          const { idInstitution } = req.params;
+          const totalUsers = await Document.distinct('StaffName', { institution: idInstitution });
+          res.json({ totalUsers: totalUsers.length });
+        } catch (error) {
+          console.error(error);
+          res.status(500).json({ message: 'Une erreur est survenue' });
+        }
+      },
+
       getSignedDocsPerUser: async (req, res) => {
         try {
           const signedDocsPerUser = await Document.aggregate([

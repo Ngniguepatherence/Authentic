@@ -11,7 +11,8 @@ const institutionSchema = new mongoose.Schema({
     publicKey: { type: String, required: true },
     privateKey: { type: String, required: true },
     password: {type: String, require:true},
-    createAt: {type:Date, default: Date.now}
+    createAt: {type:Date, default: Date.now},
+    firstCon:{type:Boolean,default:true}
 });
 
 const Institution = mongoose.model('Institution',institutionSchema);

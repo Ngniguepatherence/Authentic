@@ -67,8 +67,96 @@ const InstitutionController = {
         }
     },
 
-    login: async(req,res) => {
+  loginWithCertificate: async (req, res) => {
         const { email, password } = req.body;
+        const file = req.file;
+      
+        if (!file) {
+          return res.status(400).json({ message: "Certificat requis" });
+        }
+      
+        try {
+          const pem = file.buffer.toString("utf-8");
+      
+          let cert;
+          try {
+            cert = forge.pki.certificateFromPem(pem);
+          } catch (err) {
+            return res.status(400).json({ message: "Format de certificat invalide" });
+          }
+
+          console.log(cert);
+      
+          const subject = cert.subject.attributes.reduce((acc, attr) => {
+            acc[attr.shortName] = attr.value;
+            return acc;
+          }, {});
+      
+          const cn = subject.CN || "";
+          const o = subject.O || "";
+          const c = subject.C || "";
+      
+          const isOrgCert = o && !cn.includes("@");
+      
+          if (isOrgCert) {
+            // Gérer la connexion d'une institution + user
+            const institution = await Institution.findOne({ certificateO: o });
+            if (!institution) {
+              return res.status(404).json({ message: "Institution non reconnue." });
+            }
+      
+            const user = await User.findOne({ email, institutionId: institution._id });
+            if (!user) {
+              return res.status(404).json({ message: "Utilisateur non trouvé dans cette institution." });
+            }
+      
+            const isMatch = await bcrypt.compare(password, user.password);
+            if (!isMatch) {
+              return res.status(401).json({ message: "Mot de passe incorrect" });
+            }
+      
+            const payload = {
+              user: {
+                id: user._id,
+                name: user.name,
+                role: user.role,
+                institution: institution.name,
+              },
+            };
+      
+            const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
+            res.json({ token, user: payload.user });
+          } else {
+            // Certificat personnel
+            const user = await User.findOne({ email });
+            if (!user) {
+              return res.status(404).json({ message: "Utilisateur non trouvé" });
+            }
+      
+            const isMatch = await bcrypt.compare(password, user.password);
+            if (!isMatch) {
+              return res.status(401).json({ message: "Mot de passe incorrect" });
+            }
+      
+            const payload = {
+              user: {
+                id: user._id,
+                name: user.name,
+                role: user.role,
+              },
+            };
+      
+            const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
+            res.json({ token, user: payload.user });
+          }
+        } catch (err) {
+          console.error(err);
+          res.status(500).json({ message: "Erreur serveur" });
+        }
+      },
+      
+    login: async(req,res) => {
+        const { email, password, certificateInfo } = req.body;
         try {
             // Rechercher l'utilisateur dans les deux collections
             let institution = await Institution.findOne({ email });

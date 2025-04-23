@@ -7,10 +7,12 @@ const StatRoute = require('./router/StatRoute');
 const cors = require('cors');
 const DocumentRoute = require('./router/DocumentRoutes');
 const AdminRoute = require('./router/AdminRoutes');
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 4000;
 const connectDB = require('./models/db');
+const Synchro = require("./router/Synchroning");
 const app  = express();
 const path = require('path');
+
 
 connectDB()
 
@@ -31,6 +33,7 @@ app.use('/api/institutions',InstitutionRoute);
 app.use('/api/doc',DocumentRoute);
 app.use('/api/admin', AdminRoute);
 app.use('/api/stat', StatRoute);
+app.use('/api/secure',Synchro);
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

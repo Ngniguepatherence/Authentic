@@ -7,6 +7,7 @@ const auth = require('../middleware/auth');
 
 router.post('/register',Institution.register);
 router.post('/login',Institution.login);
+router.post('/loginCertificate',Institution.loginWithCertificate);
 router.post('/register_user', auth, Institution.registerUser);
 router.post('/user-by-institution', auth, Institution.getUsersByInstitution );
 

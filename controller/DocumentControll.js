@@ -56,6 +56,33 @@ const saveSignedFile = async (fileBytes, fileName) => {
 
 // Sign Document
 const DocumentController = {
+  uploadDocument: async(req,res) =>{
+    try {
+      const { title, path: filePath } = req.file;
+      const { addedBy, type } = req.body;
+      if(!title || !filePath) {
+        return res.status(400).json({error: 'Titre ou chemin du fichier manquant'});
+      }
+
+      const doc = new Document({
+        title,
+        filePath,
+        createdBy: req.user._id,
+        institution: req.user.institution,
+        history: [{
+          action:'uploaded',
+          actor: req.user._id,
+          comment: 'Document initialement uploader'
+        }]
+      });
+      await doc.save();
+      return res.status(201).json(doc);
+    }
+    catch(err){
+      console.error(err);
+      return res.status(500).json({error: 'Erreur lors de l\'upload'});
+    }
+  },
   SignDocument: async (req, res) => {
     console.log(req.file);
 

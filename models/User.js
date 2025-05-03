@@ -5,10 +5,10 @@ const UserSchema = mongoose.Schema({
     },
     name: { type: String, required: true},
     email: {type: String, required: true,unique: true},
-    publicKey: { type: String, required: true },
-    privateKey: { type: String, required: true },
+    publicKey: { type: String },
     password: {type: String, required: true},
     role: {type: String, enum: ['admin','user'], default:'user'},
+
     createdAt: {type: Date, default: Date.now}
 });
 

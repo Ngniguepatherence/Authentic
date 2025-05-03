@@ -4,6 +4,8 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const crypto = require('crypto');
 const User = require('../models/User');
+const {decryptData} = require('../utils/functions');
+const { getSession } = require('../services/sessionManager');
 
 const secret = process.env.SECRET;
 
@@ -68,90 +70,167 @@ const InstitutionController = {
     },
 
   loginWithCertificate: async (req, res) => {
-        const { email, password } = req.body;
-        const file = req.file;
+    
+        const clientID = req.body.clientID;
+        // const iv = Buffer.from(req.body.iv, 'base64');
+        // const encryptedData = Buffer.from(req.body.encryptedData,'base64');
+        // const session = getSession(clientID);
+          const data = req.body.encryptedData;
       
-        if (!file) {
-          return res.status(400).json({ message: "Certificat requis" });
-        }
-      
-        try {
-          const pem = file.buffer.toString("utf-8");
-      
-          let cert;
           try {
-            cert = forge.pki.certificateFromPem(pem);
-          } catch (err) {
-            return res.status(400).json({ message: "Format de certificat invalide" });
+            // console.log(session);
+            // if (!session) return res.status(403).json({ error: 'Invalid session token' });
+            
+            // if (!encryptedData || !iv) {
+            //   return res.status(400).json({ error: "Données chiffrées ou IV manquants." });
+            // }
+            // console.log(encryptedData);
+            // const data = decryptData(encryptedData,iv,session.aesKey);
+            console.log(data)
+            
+        
+        // 🔍 Vérifications
+          const { countryName,organizationName,organizationalUnitName,commonName  } = data.issuer;
+          const { notBefore, notAfter, serialNumber,publicKeyPem, fingerprintSHA256 } = data;
+
+          const now = new Date();
+          const fromDate = new Date(notBefore);
+          const toDate = new Date(notAfter);
+
+          if (now < fromDate || now > toDate) {
+            return res.status(400).json({ error: "Certificat expiré ou non encore valide." });
           }
 
-          console.log(cert);
+          const allowedCountries = ['CM'];
+          if (!allowedCountries.includes(countryName)) {
+            return res.status(403).json({ error: `Pays non autorisé : ${countryName}` });
+          }
+
+          console.log("✅ Certificat déchiffré et valide");
+          console.log("CN :", commonName);
+          console.log("Organisation :", organizationName);
+          console.log("Unit Name :", organizationalUnitName);
+          console.log("Pays :", countryName);
+          console.log("Valide du :", notBefore, "au", notAfter);
+          console.log("Publick Key :", publicKeyPem);
+
       
-          const subject = cert.subject.attributes.reduce((acc, attr) => {
-            acc[attr.shortName] = attr.value;
-            return acc;
-          }, {});
-      
-          const cn = subject.CN || "";
-          const o = subject.O || "";
-          const c = subject.C || "";
-      
-          const isOrgCert = o && !cn.includes("@");
-      
-          if (isOrgCert) {
             // Gérer la connexion d'une institution + user
-            const institution = await Institution.findOne({ certificateO: o });
+            const institution = await Institution.findOne({ name: organizationName });
             if (!institution) {
               return res.status(404).json({ message: "Institution non reconnue." });
             }
       
-            const user = await User.findOne({ email, institutionId: institution._id });
-            if (!user) {
-              return res.status(404).json({ message: "Utilisateur non trouvé dans cette institution." });
-            }
-      
-            const isMatch = await bcrypt.compare(password, user.password);
-            if (!isMatch) {
-              return res.status(401).json({ message: "Mot de passe incorrect" });
-            }
-      
             const payload = {
               user: {
-                id: user._id,
-                name: user.name,
-                role: user.role,
-                institution: institution.name,
+                id: institution._id,
+                name: institution.name,
+                institution: institution.address,
               },
             };
       
-            const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
+            const token = jwt.sign(payload, process.env.SECRET, { expiresIn: "7d" });
+            console.log(`organisation ${organizationName} connectes en tant que Admin a la platforme avec success!`)
             res.json({ token, user: payload.user });
-          } else {
-            // Certificat personnel
-            const user = await User.findOne({ email });
-            if (!user) {
-              return res.status(404).json({ message: "Utilisateur non trouvé" });
-            }
-      
-            const isMatch = await bcrypt.compare(password, user.password);
-            if (!isMatch) {
-              return res.status(401).json({ message: "Mot de passe incorrect" });
-            }
-      
-            const payload = {
-              user: {
-                id: user._id,
-                name: user.name,
-                role: user.role,
-              },
-            };
-      
-            const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
-            res.json({ token, user: payload.user });
-          }
+          
         } catch (err) {
           console.error(err);
           res.status(500).json({ message: "Erreur serveur" });
+        }
+      },
+
+      registerwithCertificate: async (req,res) => {
+        console.log('registring starting...');
+          
+          const {encryptedData, iv,clientID,encrytedForm} = req.body;
+        try {
+            const session = getSession(clientID);
+            // console.log(session);
+            const ivB = Buffer.from(iv, 'base64');
+            const encryptedDataB = Buffer.from(encryptedData,'base64');
+            // const encryptedDataForm = Buffer.from(encrytedForm,'base64');
+            // console.log(encryptedData);
+            
+            const datas = decryptData(encryptedDataB,ivB,session.aesKey);
+            const data = JSON.parse(datas);
+            console.log(JSON.parse(datas));
+            console.log(encrytedForm);
+            
+            
+            // 🔍 Vérifications
+              const { countryName,organizationName,organizationalUnitName,commonName } = data.issuer;
+              const { notBefore, notAfter, serialNumber,publicKeyPem, fingerprintSHA256 } = data;
+    
+              const now = new Date();
+              const fromDate = new Date(notBefore);
+              const toDate = new Date(notAfter);
+    
+              if (now < fromDate || now > toDate) {
+                return res.status(400).json({ error: "Certificat expiré ou non encore valide." });
+              }
+    
+              const allowedCountries = ['CM'];
+              if (!allowedCountries.includes(countryName)) {
+                return res.status(403).json({ error: `Pays non autorisé : ${countryName}` });
+              }
+              console.log("✅ Certificat déchiffré et valide");
+            console.log("CN :", commonName);
+            console.log("Organisation :", organizationName);
+            console.log("Unit Name :", organizationalUnitName);
+            console.log("Pays :", countryName);
+            console.log("Valide du :", notBefore, "au", notAfter);
+            console.log("Publick Key :", publicKeyPem);
+            const {institutionName, location,website,address,description,email,telephone} = encrytedForm;
+            //   console.log(formData);
+            let institution = await Institution.findOne({email});
+            if (institution) {
+                return res.status(400).json({msg: 'Institution already exists'});
+            }
+
+            
+            const newInstitution = new Institution({
+                name: institutionName,
+                website: website,
+                address: address,
+                email: email,
+                phone: telephone,
+                description: description,
+                location: location,
+          
+                certificate: {
+                  commonName: commonName,
+                  organization: organizationName,
+                  organizationalUnit: organizationalUnitName,
+                  country: countryName,
+                  validFrom: notBefore,
+                  validTo: notAfter,
+                  publicKey: publicKeyPem,
+                  fingerprint:  fingerprintSHA256 || null,
+                  certificateRaw: serialNumber || "",
+                  verified: false
+                },
+          
+                createdAt: new Date()
+              });
+          
+              await newInstitution.save();
+              const payload = { user: {id: newInstitution._id, type: 'institution'}};
+          
+              res.status(201).json({
+                message: "Institution enregistrée avec succès.",
+                institutionId: newInstitution._id
+              });
+            
+            
+              
+              jwt.sign(payload,secret, {expiresIn: 360000 }, (err,token) => {
+                  if(err) throw err;
+                  res.json({token});
+              });
+
+        }catch(error){
+            console.error(error);
+            res.status(500).json({message: "Server Error"});
         }
       },
       

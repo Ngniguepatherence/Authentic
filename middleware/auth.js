@@ -4,7 +4,7 @@ require('dotenv').config();
 const secret = process.env.SECRET;
 
 const midlleware = (req,res, next) => {
-    const token = req.header('x-auth-token');
+    const token = req.headers['authorization']?.split(' ')[1];
     
     if(!token) {
         return res.status(401).json({msg: "No token, authorizatioon denied"});

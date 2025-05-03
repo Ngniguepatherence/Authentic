@@ -1,20 +1,44 @@
-const mongoose = require('mongoose')
+const mongoose = require('mongoose');
+const { v4: uuidv4 } = require('uuid');
 
-const institutionSchema = new mongoose.Schema({
-    name: {type: String, require: true},
-    address: {type: String, require:true},
-    boitepostal: {type: String, require: true},
-    tel: {type: String, require: true},
-    email: {type: String, require:true},
-    headerName: {type: String, require: true},
-    website: {type: String, require: true},
-    publicKey: { type: String, required: true },
-    privateKey: { type: String, required: true },
-    password: {type: String, require:true},
-    createAt: {type:Date, default: Date.now},
-    firstCon:{type:Boolean,default:true}
-});
+const InstitutionSchema = new mongoose.Schema({
+    name: String,
+    website: String,
+    address: String,
+    email: String,
+    phone: String,
+    description: String,
+    location: String,
+    logo: {
+      url: String,
+      fileType: String,
+      uploadedAt: Date
+    },
+    certificate: {
+      commonName: String,
+      organization: String,
+      organizationalUnit: String,
+      country: String,
+      validFrom: Date,
+      validTo: Date,
+      publicKey: String,
+      fingerprint: String,
+      certificateRaw: String,
+      verified: Boolean
+    },
+    status: {
+      type: String,
+      enum: ["pending", "validated"],
+      default: "pending"
+    },  
+    validationToken: {
+      type: String,
+      default: uuidv4
+    },
+    createdAt: { type: Date, default: Date.now },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  });
 
-const Institution = mongoose.model('Institution',institutionSchema);
+const Institution = mongoose.model('Institution',InstitutionSchema);
 
 module.exports = Institution;

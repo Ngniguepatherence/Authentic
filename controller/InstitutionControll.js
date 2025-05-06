@@ -5,7 +5,9 @@ require('dotenv').config();
 const crypto = require('crypto');
 const User = require('../models/User');
 const {decryptData} = require('../utils/functions');
+const { sendLoginInfoMail, sendConfirmationEmail } = require('../utils/sendEmail');
 const { getSession } = require('../services/sessionManager');
+const Admin = require('../models/Admin');
 
 const secret = process.env.SECRET;
 
@@ -215,7 +217,9 @@ const InstitutionController = {
           
               await newInstitution.save();
               const payload = { user: {id: newInstitution._id, type: 'institution'}};
-          
+              const password = '!Passw@rd';
+            //   await sendLoginInfoMail(email, email, password);
+              await sendConfirmationEmail(email,newInstitution._id);
               res.status(201).json({
                 message: "Institution enregistrée avec succès.",
                 institutionId: newInstitution._id
@@ -305,46 +309,107 @@ const InstitutionController = {
       },
 
       registerUser: async (req, res) => {
-        console.log(req.body.name);
-        console.log(req.body);
-
-        const { name, email, password, role } = req.body;
-  
-        console.log(name);
-
         try {
+        
+          const token = req.headers['authorization']?.split(' ')[1];
+          
+          const { name, email,fonction, password, role, tel,status } = req.body;
+  
+          if(!token) return res.status(401).json({ message: 'Token manquant'});
+
             let user = await User.findOne({ email });
             if (user) {
                 return res.status(400).json({ msg: "User already exists" });
             }
-            const institution = await Institution.findById(req.user.id);
+            // Verify and decode 
+            let decoded;
+            try {
+              decoded = jwt.verify(token, process.env.SECRET);
+            
+            } catch(err) {
+              return res.status(401).json({ message : 'Token invalide ou expire'});
+            }
+            const {organisationId} = decoded;
+
+            const institution = await Institution.findById(organisationId);
             if (!institution) {
                 return res.status(400).json({ msg: 'Institution not found' });
             }
-            const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', {
-                namedCurve: 'secp256k1', // Using the elliptic curve secp256k1
-                publicKeyEncoding: { type: 'spki', format: 'pem' },
-                privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
-            });
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(password, salt);
 
             console.log(institution.name);
 
             user = new User({
                 institution: institution.id,
-                name,
-                email,
-                publicKey: publicKey,
-                privateKey: privateKey,
-                password,
-                role
+                name: name,
+                email: email,
+                role: role,
+                status: status,
+                password :hashedPassword,
+                occupation: fonction,
+                telephone: tel
+                
             });
 
-           // console.log(user);
+            await user.save();
+            res.status(200).json(user);
+        } catch (err) {
+            console.error(err.message);
+            res.status(500).send('Server error');
+        }
+    },
+      registerAdminOrg: async (req, res) => {
+        try {
+        
+          const token = req.headers['authorization']?.split(' ')[1];
+          
+          const { name, email, password, role, tel } = req.body;
+  
+          if(!token) return res.status(401).json({ message: 'Token manquant'});
+
+            let user = await Admin.findOne({ email });
+            if (user) {
+                return res.status(400).json({ msg: "User already exists" });
+            }
+            // Verify and decode 
+            let decoded;
+            try {
+              decoded = jwt.verify(token, process.env.SECRET);
+            
+            } catch(err) {
+              return res.status(401).json({ message : 'Token invalide ou expire'});
+            }
+            const {organisationId} = decoded;
+
+            const institution = await Institution.findById(organisationId);
+            if (!institution) {
+                return res.status(400).json({ msg: 'Institution not found' });
+            }
+            const existingAdmin = await Admin.findOne({ institution: organisationId});
+            if(existingAdmin) {
+              return res.status(400).json({ message: 'Un administrateur existe deja pour cette organisation'});
+            }
             const salt = await bcrypt.genSalt(10);
-            user.password = await bcrypt.hash(password, salt);
+            const hashedPassword = await bcrypt.hash(password, salt);
+
+            console.log(institution.name);
+
+            user = new Admin({
+                institution: institution.id,
+                name: name,
+                email: email,
+                password :hashedPassword,
+                occupation: role,
+                telephone: tel
+                
+            });
 
             await user.save();
-            res.json(user);
+            institution.adminRegistered = true;
+            institution.status = "validated";
+            await institution.save();
+            res.status(200).json(user);
         } catch (err) {
             console.error(err.message);
             res.status(500).send('Server error');

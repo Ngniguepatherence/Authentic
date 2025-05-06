@@ -36,5 +36,16 @@ function decryptData(encryptedData, iv,sharedSecrets) {
   }
 }
 
+const calculateFileHash = (filePath) => {
+  return new Promise((resolve, reject) => {
+    const hashStream = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    
+    stream.on('error', err => reject(err));
+    stream.on('data', chunk => hashStream.update(chunk));
+    stream.on('end', () => resolve(hashStream.digest('hex')));
+  });
+};
 
-module.exports = {decryptData, generateKey}
+
+module.exports = {decryptData, generateKey, calculateFileHash}

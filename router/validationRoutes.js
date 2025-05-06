@@ -3,7 +3,7 @@ const router = express.Router();
 const Institution = require('../models/Institutions');
 const auth = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
-const sendEmail = require('../utils/sendEmail');
+const sendEmail = require('../utils/sendEmail').default;
 
 
 router.post('/institution/validate/:id', async(req,res) => {

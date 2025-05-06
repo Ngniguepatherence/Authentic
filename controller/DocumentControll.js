@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const jsQR = require('jsqr');
 const { createCanvas, loadImage } = require('canvas');
+const { calculateFileHash } = require('../utils/functions');
 
 const generatePdfWithQRCode = async (pdfBytes, qrCodeData) => {
   const pdfDoc = await PDFDocument.load(pdfBytes);
@@ -373,7 +374,444 @@ const DocumentController = {
       console.error(err.message);
       res.status(500).send('Server error');
     }
+  },
+
+  // @desc    Verify a document's authenticity
+// @route   POST /api/qr/:documentId/verify
+// @access  Public
+verifyDocument: async (req, res) => {
+  const documentId = req.params.documentId;
+  
+  // Trouver le document
+  const document = await Document.findById(documentId)
+    .populate({
+      path: 'uploadedBy',
+      select: 'firstName lastName email'
+    })
+    .populate({
+      path: 'qrSignatureInfo.signedBy',
+      select: 'firstName lastName email'
+    });
+
+  if (!document) {
+    return res.status(404).json({
+      success: false,
+      error: 'Document non trouvé'
+    });
   }
+
+  // Vérifier si le document est signé
+  if (document.status !== 'signed') {
+    return res.status(400).json({
+      success: false,
+      error: 'Ce document n\'est pas signé'
+    });
+  }
+
+  try {
+    // Vérifier le hash du document original
+    const originalBuffer = fs.readFileSync(document.filePath);
+    const originalHash = await createPdfHash(originalBuffer);
+    
+    const originalHashValid = originalHash === document.originalHash;
+    
+    // Vérifier le hash du document signé
+    const signedPdfPath = document.filePath.replace('.pdf', '_signed.pdf');
+    const signedBuffer = fs.readFileSync(signedPdfPath);
+    const signedHash = await createPdfHash(signedBuffer);
+    
+    const signedHashValid = signedHash === document.signedHash;
+
+    // Extraire le QR Code du PDF signé
+    const extractedQrData = await extractQRCodeFromPdf(signedBuffer);
+    
+    if (!extractedQrData) {
+      return res.status(400).json({
+        success: false,
+        error: 'Impossible d\'extraire le QR code du document'
+      });
+    }
+    
+    // Parser les données du QR code
+    const qrData = JSON.parse(extractedQrData);
+    
+    // Vérifier la signature ECC
+    const payloadToVerify = { ...qrData };
+    delete payloadToVerify.signature; // Retirer la signature pour vérification
+    
+    const signatureValid = await verifyECCSignature(
+      JSON.stringify(payloadToVerify),
+      qrData.signature
+    );
+    
+    // Vérification supplémentaire avec RAG pour détecter des fraudes potentielles
+    const fraudDetectionResult = await detectFraud(document, qrData, signedBuffer);
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        document: document,
+        verification: {
+          originalHashValid,
+          signedHashValid,
+          signatureValid,
+          fraudDetection: fraudDetectionResult
+        },
+        qrData: payloadToVerify
+      }
+    });
+    
+  } catch (error) {
+    console.error('Erreur lors de la vérification du document:', error);
+    
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la vérification du document'
+    });
+  }
+},
+QrCode: async (req,res) => {
+  try {
+    if(!req.file){
+      return res.status(400).json({ message: 'Aucun fichier n\'a ete telecharge'});
+    }
+
+    const { qrPosition, qrPositionX, qrPositionY, qrPages, specificPages,preset} = req.body;
+
+     // Validation des données
+     if (!qrPosition || !['custom', 'top-left', 'top-right', 'bottom-left', 'bottom-right', 'center'].includes(qrPosition)) {
+      return res.status(400).json({ message: 'Position du QR code invalide' });
+    }
+    
+    if (!qrPages || !['all', 'first', 'last', 'specific'].includes(qrPages)) {
+      return res.status(400).json({ message: 'Sélection de pages du QR code invalide' });
+    }
+    
+    if (qrPosition === 'custom' && (qrPositionX === undefined || qrPositionY === undefined)) {
+      return res.status(400).json({ message: 'Coordonnées de position personnalisée manquantes' });
+    }
+    
+    if (qrPages === 'specific' && !specificPages) {
+      return res.status(400).json({ message: 'Numéros de pages spécifiques requis' });
+    }
+    const originalHash = await calculateFileHash(req.file.path);
+
+    const newDocument = new Document({
+      title: req.file.originalname,
+      institution: req.user.user.institution,
+      // StaffName: req.user.user.id,
+      filePath: req.file.path,
+      fileSize: req.file.size,
+      qrCodePosition:{
+        x: qrPositionX,
+        y: qrPositionY,
+        preset: preset
+      },
+      uploadedBy: req.user.user.institution
+    });
+    await newDocument.save();
+
+    res.status(201).json({
+      message: 'Document telecharge avec succes',
+      document: {
+        id: newDocument._id,
+        originalName: newDocument.title,
+        size: newDocument.fileSize,
+        uploadDate: newDocument.updatedAt,
+        status: newDocument.status
+      }
+    });
+  } catch(error) {
+    console.error('Erreur lors du telechargement du document :', error);
+    if(req.file){
+      fs.unlink(req.file.path, (err) =>{
+        if (err) console.error('Erreur lors de la suppression du fichier: ', err);
+      });
+    }
+    res.status(500).json({ message: 'Erreur serveur lors du telechargement du fichier'})
+  }
+},
+
+SignatureFinal: async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { qrContent,publicKey } = req.body;
+    
+    if (!qrContent) {
+      return res.status(400).json({ message: 'Contenu du QR code requis' });
+    }
+    
+    // Recherche du document
+    const document = await Document.findById(id);
+    if (!document) {
+      return res.status(404).json({ message: 'Document non trouvé' });
+    }
+    
+    // Vérification des autorisations (admin ou propriétaire)
+    if (!req.user.user.isAdmin && document.user.toString() !== req.user.user.id) {
+      return res.status(403).json({ message: 'Accès refusé' });
+    }
+    
+    // Vérification que le document n'a pas déjà été signé
+    if (document.status === 'signed') {
+      return res.status(400).json({ message: 'Ce document a déjà été signé' });
+    }
+    
+    // Vérification de l'intégrité du fichier original
+    const currentHash = await calculateFileHash(document.filePath);
+    if (currentHash !== document.originalHash) {
+      return res.status(400).json({ message: 'Le fichier a été modifié après le téléchargement initial' });
+    }
+    
+    // Création du contenu du QR code avec informations de signature
+    const signatureData = {
+      documentId: document._id,
+      originalHash: document.originalHash,
+      signedBy: req.user.user.id,
+      signedAt: new Date(),
+      customContent: qrContent
+    };
+    
+    // Hachage des données de signature pour vérification ultérieure
+    const signatureHash = crypto
+      .createHash('sha256')
+      .update(JSON.stringify(signatureData))
+      .digest('hex');
+    
+    // Ajout du hash de signature aux données
+    signatureData.signatureHash = signatureHash;
+    
+    // Génération du QR code
+    const qrImageDataURL = await QRCode.toDataURL(JSON.stringify(signatureData));
+    const qrImageData = qrImageDataURL.split(',')[1];
+    
+    // Chargement du document PDF
+    const pdfBytes = fs.readFileSync(document.filePath);
+    const pdfDoc = await PDFDocument.load(pdfBytes);
+    
+    // Détermination des pages où ajouter le QR code
+    const pageCount = pdfDoc.getPageCount();
+    let pagesToModify = [];
+    
+    switch (document.qrPages.type) {
+      case 'all':
+        pagesToModify = Array.from({ length: pageCount }, (_, i) => i);
+        break;
+      case 'first':
+        pagesToModify = [0];
+        break;
+      case 'last':
+        pagesToModify = [pageCount - 1];
+        break;
+      case 'specific':
+        // Analyse des pages spécifiques (ex: "1,3,5-7")
+        if (document.qrPages.specificPages) {
+          const pageRanges = document.qrPages.specificPages.split(',');
+          pageRanges.forEach(range => {
+            if (range.includes('-')) {
+              const [start, end] = range.split('-').map(num => parseInt(num) - 1);
+              for (let i = start; i <= end; i++) {
+                if (i >= 0 && i < pageCount) pagesToModify.push(i);
+              }
+            } else {
+              const pageNum = parseInt(range) - 1;
+              if (pageNum >= 0 && pageNum < pageCount) pagesToModify.push(pageNum);
+            }
+          });
+        }
+        break;
+    }
+    
+    // Création d'une image à partir du QR code
+    const qrImage = await pdfDoc.embedPng(Buffer.from(qrImageData, 'base64'));
+    
+    // Définition de la taille du QR code (en points)
+    const qrSize = 100;
+    
+    // Ajout du QR code à chaque page sélectionnée
+    pagesToModify.forEach(pageIndex => {
+      const page = pdfDoc.getPage(pageIndex);
+      const { width, height } = page.getSize();
+      
+      // Détermination de la position du QR code en fonction du paramètre
+      let x, y;
+      
+      if (document.qrPosition.type === 'custom') {
+        // Position personnalisée basée sur les pourcentages
+        x = (document.qrPosition.x / 100) * width;
+        y = height - ((document.qrPosition.y / 100) * height) - qrSize; // Inversion de Y car PDF utilise l'origine en bas à gauche
+      } else {
+        // Positions prédéfinies
+        const margin = 20;
+        switch (document.qrPosition.type) {
+          case 'top-left':
+            x = margin;
+            y = height - margin - qrSize;
+            break;
+          case 'top-right':
+            x = width - margin - qrSize;
+            y = height - margin - qrSize;
+            break;
+          case 'bottom-left':
+            x = margin;
+            y = margin;
+            break;
+          case 'bottom-right':
+            x = width - margin - qrSize;
+            y = margin;
+            break;
+          case 'center':
+            x = (width - qrSize) / 2;
+            y = (height - qrSize) / 2;
+            break;
+        }
+      }
+      
+      // Dessin du QR code sur la page
+      page.drawImage(qrImage, {
+        x,
+        y,
+        width: qrSize,
+        height: qrSize
+      });
+    });
+    
+    // Enregistrement du document signé
+    const signedPdfBytes = await pdfDoc.save();
+    const signedFilePath = path.join(__dirname, 'signed', `signed-${document.fileName}`);
+    
+    // Création du répertoire des documents signés s'il n'existe pas
+    const signedDir = path.join(__dirname, 'signed');
+    if (!fs.existsSync(signedDir)) {
+      fs.mkdirSync(signedDir, { recursive: true });
+    }
+    
+    // Écriture du document signé
+    fs.writeFileSync(signedFilePath, signedPdfBytes);
+    
+    // Mise à jour du document dans la base de données
+    document.status = 'signed';
+    document.signatureInfo = {
+      signedBy: req.user.user.id,
+      signedAt: new Date(),
+      signatureHash,
+      qrContent
+    };
+    
+    await document.save();
+    
+    res.status(200).json({
+      message: 'Document signé avec succès',
+      document: {
+        id: document._id,
+        originalName: document.originalName,
+        status: document.status,
+        signedAt: document.signatureInfo.signedAt
+      }
+    });
+  } catch (error) {
+    console.error('Erreur lors de la signature du document:', error);
+    res.status(500).json({ message: 'Erreur serveur lors de la signature du document' });
+  }
+},
+
+DownloadDocument: async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Recherche du document
+    const document = await Document.findById(id);
+    if (!document) {
+      return res.status(404).json({ message: 'Document non trouvé' });
+    }
+    
+    // Vérification des autorisations (admin ou propriétaire)
+    if (!req.user.user.isAdmin && document.user.toString() !== req.user.user.id) {
+      return res.status(403).json({ message: 'Accès refusé' });
+    }
+    
+    // Chemin du fichier à télécharger
+    let filePath;
+    if (document.status === 'signed') {
+      filePath = path.join(__dirname, 'signed', `signed-${document.fileName}`);
+    } else {
+      filePath = document.filePath;
+    }
+    
+    // Vérification de l'existence du fichier
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: 'Fichier non trouvé sur le serveur' });
+    }
+    
+    // Envoi du fichier
+    res.download(filePath, document.status === 'signed' 
+      ? `signed-${document.originalName}` 
+      : document.originalName);
+  } catch (error) {
+    console.error('Erreur lors du téléchargement du document:', error);
+    res.status(500).json({ message: 'Erreur serveur lors du téléchargement du document' });
+  }
+},
+DeleteDocument: async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Recherche du document
+    const document = await Document.findById(id);
+    if (!document) {
+      return res.status(404).json({ message: 'Document non trouvé' });
+    }
+    
+    // Vérification des autorisations (admin ou propriétaire)
+    if (!req.user.user.isAdmin && document.user.toString() !== req.user.user.id) {
+      return res.status(403).json({ message: 'Accès refusé' });
+    }
+    
+    // Suppression des fichiers
+    if (fs.existsSync(document.filePath)) {
+      fs.unlinkSync(document.filePath);
+    }
+    
+    // Suppression du fichier signé s'il existe
+    const signedFilePath = path.join(__dirname, 'signed', `signed-${document.fileName}`);
+    if (fs.existsSync(signedFilePath)) {
+      fs.unlinkSync(signedFilePath);
+    }
+    
+    // Suppression du document de la base de données
+    await Document.findByIdAndDelete(id);
+    
+    res.status(200).json({ message: 'Document supprimé avec succès' });
+  } catch (error) {
+    console.error('Erreur lors de la suppression du document:', error);
+    res.status(500).json({ message: 'Erreur serveur lors de la suppression du document' });
+  }
+},
+// Route pour obtenir les détails d'un document
+DocumentDetails: async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Recherche du document avec les informations utilisateur
+    const document = await Document.findById(id)
+      .populate('user', 'username email')
+      .populate('signatureInfo.signedBy', 'username email');
+    
+    if (!document) {
+      return res.status(404).json({ message: 'Document non trouvé' });
+    }
+    
+    // Vérification des autorisations (admin ou propriétaire)
+    if (!req.user.user.isAdmin && document.user._id.toString() !== req.user.user.id) {
+      return res.status(403).json({ message: 'Accès refusé' });
+    }
+    
+    res.status(200).json({ document });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des détails du document:', error);
+    res.status(500).json({ message: 'Erreur serveur lors de la récupération des détails du document' });
+  }
+},
 
 };
 

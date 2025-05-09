@@ -9,13 +9,14 @@ router.post('/register',Institution.register);
 router.post('/login',Institution.login);
 router.post('/loginCertificate',Institution.loginWithCertificate);
 router.post('/registerOwner', auth, Institution.registerAdminOrg);
-router.post('/registerUsers', auth, Institution.registerUser);
+
 router.post('/registerCertificate', auth, Institution.registerwithCertificate);
 router.post('/user-by-institution', auth, Institution.getUsersByInstitution );
 
 router.post('/delete/',auth, Institution.deleteInstitution);
 router.get('/institutions',auth,Institution.getInstitution);
 router.get('/institution/:id',auth,Institution.getInstitutionId);
-router.post('/logout',auth,Institution.logout);
+router.post('/logout',auth,Institution.logout);///get/:institutionId
+router.get('/institutions/get/:id',auth,Institution.getInstitutionId);
 
 module.exports = router;

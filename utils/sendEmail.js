@@ -31,13 +31,13 @@ async function sendLoginInfoMail(to, username, password) {
 
   await transporter.sendMail(mailOptions);
 }
-async function sendConfirmationEmail(to,organisationId) {
+async function sendConfirmationEmail(to,organisationId, code) {
   const token = jwt.sign(
     {organisationId}, process.env.SECRET,
     { expiresIn: '1d'}
   );
 
-  const confirmationLink = `${process.env.FRONTEND_URL}/tutoUser?token=${token}`;
+  const confirmationLink = `${process.env.FRONTEND_URL}/tutoUser?token=${organisationId}`;
 
   const mailOptions = {
     from: `"Support Authentic Platform" <${process.env.EMAIL_USER}>`,
@@ -51,10 +51,32 @@ async function sendConfirmationEmail(to,organisationId) {
           Confirmer mon compte
         </a>
       </p>
-      <p>Ce lien expirera dans 24 heures.</p>
+      <p>Ce lien expirera dans 24 heures. code secret ${code}</p>
     `
   };
   await transporter.sendMail(mailOptions);
 }
 
-module.exports = { sendLoginInfoMail,sendConfirmationEmail };
+async function sendConfirmationEmailPersonnel(to,organisationId, code) {
+  const token = jwt.sign(
+    {organisationId}, process.env.SECRET,
+    { expiresIn: '1d'}
+  );
+
+  const confirmationLink = `${process.env.FRONTEND_URL}/tutoUser?token=${organisationId}`;
+
+  const mailOptions = {
+    from: `"Support Authentic Platform" <${process.env.EMAIL_USER}>`,
+    to: to,
+    subjeect: 'Confirmez votre compte',
+    html: `
+      <h3>Bienvenue sur la platforme Authentic ${to}!</h3>
+      <p>Pour compléter votre inscription, veuillez cliquer sur le bouton ci-dessous :</p>
+      
+      <p>Ce lien expirera dans 24 heures. code secret ${code}</p>
+    `
+  };
+  await transporter.sendMail(mailOptions);
+}
+
+module.exports = { sendLoginInfoMail,sendConfirmationEmail,sendConfirmationEmailPersonnel };

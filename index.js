@@ -19,6 +19,9 @@ const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
 //  659227598
 
+
+
+
 connectDB()
 
 const corsOptions = {
@@ -33,6 +36,7 @@ app.use(express.urlencoded({ extended: true }));
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   standardHeaders: true,
+  max: 500, // limite de 100 requêtes par windowMs
   legacyHeaders: false,
   message: 'Trop de requetes depuis cette IP, veuillez reessayer apres 15 minutes'
 });
@@ -45,6 +49,7 @@ app.use('/api/files',express.static(path.join(__dirname, '/uploads')));
 
 app.use('/api/institutions',InstitutionRoute);
 app.use('/api/doc',DocumentRoute);
+app.use('/api/user',UserRoute);
 app.use('/api/admin', AdminRoute);
 app.use('/api/stat', StatRoute);
 app.use('/api/secure',Synchro);

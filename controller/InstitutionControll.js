@@ -141,103 +141,132 @@ const InstitutionController = {
         }
       },
 
-      registerwithCertificate: async (req,res) => {
-        console.log('registring starting...');
-          
-          const {encryptedData, iv,clientID,encrytedForm} = req.body;
+      registerwithCertificate: async (req, res) => {
+        console.log('registering starting...');
+        const { encryptedData, iv, clientID, encryptedFormData, encryptedFormIv } = req.body;
         try {
             const session = getSession(clientID);
-            // console.log(session);
+    
             const ivB = Buffer.from(iv, 'base64');
-            const encryptedDataB = Buffer.from(encryptedData,'base64');
-            // const encryptedDataForm = Buffer.from(encrytedForm,'base64');
-            // console.log(encryptedData);
+            const encryptedDataB = Buffer.from(encryptedData, 'base64');
+            console.log('log data',encryptedData);
+            console.log('log session:', session);
             
-            const datas = decryptData(encryptedDataB,ivB,session.aesKey);
+            const datas = decryptData(encryptedDataB, ivB, session.aesKey);
             const data = JSON.parse(datas);
-            console.log(JSON.parse(datas));
-            console.log(encrytedForm);
-            
-            
-            // 🔍 Vérifications
-              const { countryName,organizationName,organizationalUnitName,commonName } = data.issuer;
-              const { notBefore, notAfter, serialNumber,publicKeyPem, fingerprintSHA256 } = data;
     
-              const now = new Date();
-              const fromDate = new Date(notBefore);
-              const toDate = new Date(notAfter);
+            console.log("✅ Données du certificat déchiffrées:", data);
     
-              if (now < fromDate || now > toDate) {
+            const encryptedDataFormB = Buffer.from(encryptedFormData, 'base64');
+            const ivFormB = Buffer.from(encryptedFormIv, 'base64');
+            const formDatas = decryptData(encryptedDataFormB, ivFormB, session.aesKey);
+            const formData = JSON.parse(formDatas);
+    
+            console.log("✅ Données du formulaire déchiffrées:", formData);
+    
+            // --- Vérifications du certificat
+            const { countryName, organizationName, organizationalUnitName, commonName } = data.issuer;
+            const { notBefore, notAfter, serialNumber, publicKeyPem, fingerprintSHA256 } = data;
+    
+            const now = new Date();
+            const fromDate = new Date(notBefore);
+            const toDate = new Date(notAfter);
+    
+            if (now < fromDate || now > toDate) {
                 return res.status(400).json({ error: "Certificat expiré ou non encore valide." });
-              }
-    
-              const allowedCountries = ['CM'];
-              if (!allowedCountries.includes(countryName)) {
-                return res.status(403).json({ error: `Pays non autorisé : ${countryName}` });
-              }
-              console.log("✅ Certificat déchiffré et valide");
-            console.log("CN :", commonName);
-            console.log("Organisation :", organizationName);
-            console.log("Unit Name :", organizationalUnitName);
-            console.log("Pays :", countryName);
-            console.log("Valide du :", notBefore, "au", notAfter);
-            console.log("Publick Key :", publicKeyPem);
-            const {institutionName, location,website,address,description,email,telephone} = encrytedForm;
-            //   console.log(formData);
-            let institution = await Institution.findOne({email});
-            if (institution) {
-                return res.status(400).json({msg: 'Institution already exists'});
             }
-
-            
+    
+            const allowedCountries = ['CM'];
+            if (!allowedCountries.includes(countryName)) {
+                return res.status(403).json({ error: `Pays non autorisé : ${countryName}` });
+            }
+    
+            console.log("✅ Certificat valide:", { commonName, organizationName, countryName });
+    
+            const { institutionName, location, website, address, description, email, telephone } = formData;
+    
+            // ✅ Vérifier si l'email existe déjà
+            let institution = await Institution.findOne({ email });
+            if (institution) {
+                return res.status(409).json({  message: 'Institution email already exists' });
+            }
+    
+            // ✅ Vérifier si le certificat existe déjà (par fingerprint ou serialNumber)
+            let certExists = await Institution.findOne({
+                $or: [
+                    { "certificate.fingerprint": fingerprintSHA256 },
+                    { "certificate.certificateRaw": serialNumber }
+                ]
+            });
+            if (certExists) {
+                return res.status(409).json({  message: 'Un certificat identique est déjà enregistré.' });
+            }
+    
+            // ✅ Sinon, on crée l'institution
             const newInstitution = new Institution({
                 name: institutionName,
-                website: website,
-                address: address,
-                email: email,
+                website,
+                address,
+                email,
                 phone: telephone,
-                description: description,
-                location: location,
-          
+                description,
+                location,
                 certificate: {
-                  commonName: commonName,
-                  organization: organizationName,
-                  organizationalUnit: organizationalUnitName,
-                  country: countryName,
-                  validFrom: notBefore,
-                  validTo: notAfter,
-                  publicKey: publicKeyPem,
-                  fingerprint:  fingerprintSHA256 || null,
-                  certificateRaw: serialNumber || "",
-                  verified: false
+                    commonName,
+                    organization: organizationName,
+                    organizationalUnit: organizationalUnitName,
+                    country: countryName,
+                    validFrom: notBefore,
+                    validTo: notAfter,
+                    publicKey: publicKeyPem,
+                    fingerprint: fingerprintSHA256 || null,
+                    certificateRaw: serialNumber || "",
+                    verified: false
                 },
-          
                 createdAt: new Date()
-              });
-          
-              await newInstitution.save();
-              const payload = { user: {id: newInstitution._id, type: 'institution'}};
-              const password = '!Passw@rd';
-            //   await sendLoginInfoMail(email, email, password);
-              await sendConfirmationEmail(email,newInstitution._id);
-              res.status(201).json({
-                message: "Institution enregistrée avec succès.",
-                institutionId: newInstitution._id
-              });
-            
-            
-              
-              jwt.sign(payload,secret, {expiresIn: 360000 }, (err,token) => {
-                  if(err) throw err;
-                  res.json({token});
-              });
-
-        }catch(error){
+            });
+    
+            await newInstitution.save();
+    
+            const payload = { user: { id: newInstitution._id, type: 'institution' } };
+           // await sendConfirmationEmail(email, newInstitution._id);
+    
+            jwt.sign(payload, secret, { expiresIn: 360000 }, (err, token) => {
+                if (err) throw err;
+                res.status(201).json({
+                    message: "Institution enregistrée avec succès.",
+                    institutionId: newInstitution._id,
+                    token
+                });
+            });
+    
+        } catch (error) {
             console.error(error);
-            res.status(500).json({message: "Server Error"});
+            res.status(500).json({ message: "Server Error" });
         }
-      },
-      
+    },
+    
+    getInstitutionById: async(req,res)=>{
+        try {
+            const { institutionId } = req.params;
+        
+            // Chercher l'institution par son ID
+            const institution = await Institution.findById(institutionId);
+        
+            if (!institution) {
+              return res.status(404).json({ msg: 'Institution introuvable.' });
+            }
+        
+            // Retourner l'institution
+            return res.status(200).json(institution);
+        
+          } catch (err) {
+            console.error('Erreur lors de la récupération de l\'institution :', err);
+            return res.status(500).json({ msg: 'Erreur serveur.' });
+          }
+    },
+    
+    
     login: async(req,res) => {
         const { email, password, certificateInfo } = req.body;
         try {
@@ -446,20 +475,29 @@ const InstitutionController = {
             res.status(500).send('Server error');
         }
     },
-    getInstitutionId: async(req,res) => {
-        try{
-            const {id} = req.params;
-            const institution = await Institution.findById(id);
-              
-            institution.publicKey = ""
-            institution.password = ""
-            institution.privateKey = ''
+    getInstitutionId: async (req, res) => {
+        try {
+            const { id } = req.params;
 
+            console.log('++++++++++++++++++..................', id);
+            
+            const institution = await Institution.findById(id).lean();
+    
+            if (!institution) {
+                return res.status(404).send('Institution not found...');
+            }
+    
+            delete institution.publicKey;
+            delete institution.privateKey;
+            delete institution.password;
+            delete institution.certificate;
+    
             res.json(institution);
-        }catch(err) {
-            res.status(500).send('Error during geting institution');
+        } catch (err) {
+            res.status(500).send('Error getting institution');
         }
     },
+    
     logout: async(req,res) => {
          // Effacer le cookie ou le localStorage
     res.clearCookie('jwt'); // Si vous utilisez des cookies

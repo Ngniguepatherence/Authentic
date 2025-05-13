@@ -8,7 +8,7 @@ const midlleware = (req,res, next) => {
     
 
     console.log("_+++++++++++++++== ✅ l✅ l✅ l✅ l✅ l==============================================", token);
-    l
+    
     
     if (!token) {
         return res.status(401).json({ msg: "No token, authorization denied" });

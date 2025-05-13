@@ -10,7 +10,7 @@ router.post('/login',Institution.login);
 router.post('/loginCertificate',Institution.loginWithCertificate);
 router.post('/registerOwner', auth, Institution.registerAdminOrg);
 
-router.post('/registerCertificate', auth, Institution.registerwithCertificate);
+router.post('/registerCertificate',  Institution.registerwithCertificate);
 router.post('/user-by-institution', auth, Institution.getUsersByInstitution );
 
 router.post('/delete/',auth, Institution.deleteInstitution);

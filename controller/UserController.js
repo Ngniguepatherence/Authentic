@@ -299,7 +299,7 @@ const UserController = {
             msg: "Le compte n'est pas activé. Veuillez vérifier votre email et cliquer sur le lien d'activation.",
             role: "OWN"
           });
-        } else if (user.role === "USER") {
+        } else {
           return res.status(403).json({
             msg: "Le compte n'est pas activé. Veuillez entrer le code secret envoyé à votre email.",
             role: "USER"

@@ -8,7 +8,7 @@ const {decryptData} = require('../utils/functions');
 const { sendLoginInfoMail, sendConfirmationEmail } = require('../utils/sendEmail');
 const { getSession } = require('../services/sessionManager');
 const Admin = require('../models/Admin');
-
+const mongoose = require('mongoose');
 const secret = process.env.SECRET;
 
 
@@ -246,25 +246,32 @@ const InstitutionController = {
         }
     },
     
-    getInstitutionById: async(req,res)=>{
+    getInstitutionById: async (req, res) => {
+        const institutionId = req.query.id;
+        console.log('📥 Reçu ID =', institutionId);
+      
+        if (!institutionId) {
+          return res.status(400).json({ msg: 'ID manquant dans la requête.' });
+        }
+      
+        if (!mongoose.Types.ObjectId.isValid(institutionId)) {
+          return res.status(400).json({ msg: 'ID invalide.' });
+        }
+      
         try {
-            const { institutionId } = req.params;
-        
-            // Chercher l'institution par son ID
-            const institution = await Institution.findById(institutionId);
-        
-            if (!institution) {
-              return res.status(404).json({ msg: 'Institution introuvable.' });
-            }
-        
-            // Retourner l'institution
-            return res.status(200).json(institution);
-        
-          } catch (err) {
-            console.error('Erreur lors de la récupération de l\'institution :', err);
-            return res.status(500).json({ msg: 'Erreur serveur.' });
+          const institution = await Institution.findById(institutionId);
+      
+          if (!institution) {
+            return res.status(404).json({ msg: 'Institution introuvable.' });
           }
-    },
+      
+          return res.status(200).json(institution);
+        } catch (err) {
+          console.error('🔥 Erreur serveur lors du findById :', err);
+          return res.status(500).json({ msg: 'Erreur serveur.' });
+        }
+      },
+
     
     
     login: async(req,res) => {
@@ -475,28 +482,28 @@ const InstitutionController = {
             res.status(500).send('Server error');
         }
     },
-    getInstitutionId: async (req, res) => {
-        try {
-            const { id } = req.params;
+    // getInstitutionId: async (req, res) => {
+    //     try {
+    //         const { id } = req.params;
 
-            console.log('++++++++++++++++++..................', id);
+    //         console.log('++++++++++++++++++..................', id);
             
-            const institution = await Institution.findById(id).lean();
+    //         const institution = await Institution.findById(id).lean();
     
-            if (!institution) {
-                return res.status(404).send('Institution not found...');
-            }
+    //         if (!institution) {
+    //             return res.status(404).send('Institution not found...');
+    //         }
     
-            delete institution.publicKey;
-            delete institution.privateKey;
-            delete institution.password;
-            delete institution.certificate;
+    //         delete institution.publicKey;
+    //         delete institution.privateKey;
+    //         delete institution.password;
+    //         delete institution.certificate;
     
-            res.json(institution);
-        } catch (err) {
-            res.status(500).send('Error getting institution');
-        }
-    },
+    //         res.json(institution);
+    //     } catch (err) {
+    //         res.status(500).send('Error getting institution');
+    //     }
+    // },
     
     logout: async(req,res) => {
          // Effacer le cookie ou le localStorage

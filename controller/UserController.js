@@ -341,9 +341,10 @@ const UserController = {
   getCurrentUser: async(req, res) => {
     try {
 
-      console.log('❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌');
       
-     // console.log(res);
+
+
+
       
       if (!req.user) {
         return res.status(401).json({ msg: "Utilisateur non authentifié." });
@@ -355,6 +356,8 @@ const UserController = {
       if (!user) {
         return res.status(401).json({ msg: "Utilisateur introuvable." });
       }
+
+    //  console.log(user);
   
       return res.status(200).json(user);
     } catch (err) {

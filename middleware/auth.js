@@ -7,7 +7,7 @@ const midlleware = (req,res, next) => {
     const token = req.headers['authorization']?.split(' ')[1]; // Extraction du token
     
 
-    console.log("_+++++++++++++++== ✅ l✅ l✅ l✅ l✅ l==============================================", token);
+    console.log("_+++++++++++++++== ✅ l✅ l✅ l✅ l✅ l==============================================", token, req.params, req.body, req.query); // Log pour le débogage
     
     
     if (!token) {

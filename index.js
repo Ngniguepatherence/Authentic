@@ -19,6 +19,7 @@ const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
 //  659227598
 
+const fs = require('fs');
 
 
 
@@ -56,6 +57,53 @@ app.use('/api/secure',Synchro);
 app.use('/v1/validate',validatedRoute);
 app.use('/v1/validate',validToken);
 // app.use('/api/qr',qrRoutes);
+
+app.get('/download/:filename', (req, res) => {
+  const filename = req.params.filename;
+
+  // Chemins vers les deux dossiers possibles
+  const documentPath = path.join(__dirname, 'uploads/documents', filename);
+  const pendingPath = path.join(__dirname, 'uploads/pending', filename);
+
+  // Vérifie dans "documents"
+  if (fs.existsSync(documentPath)) {
+    return res.download(documentPath);
+  }
+
+  // Sinon vérifie dans "pending"
+  if (fs.existsSync(pendingPath)) {
+    return res.download(pendingPath);
+  }
+
+  // Sinon, fichier introuvable
+  res.status(406).json({ error: 'Fichier non trouvé' });
+  console.log('Fichier non trouvé :', filename);
+});
+
+
+
+app.get('/download-pending/:filename', (req, res) => {
+  const filename = req.params.filename;
+
+  // Chemins vers les deux dossiers possibles
+  const documentPath = path.join(__dirname, 'uploads/documents', filename);
+  const pendingPath = path.join(__dirname, 'uploads/pending', filename);
+
+  // Vérifie dans "documents"
+  if (fs.existsSync(documentPath)) {
+    return res.download(documentPath);
+  }
+
+  // Sinon vérifie dans "pending"
+  if (fs.existsSync(pendingPath)) {
+    return res.download(pendingPath);
+  }
+
+  // Sinon, fichier introuvable
+  res.status(406).json({ error: 'Fichier non trouvé' });
+  console.log('Fichier non trouvé :', filename);
+});
+
 
 app.use((err, req, res, next) => {
   console.error(err.stack);

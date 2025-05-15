@@ -341,11 +341,7 @@ const UserController = {
   getCurrentUser: async(req, res) => {
     try {
 
-      
-
-
-
-      
+            
       if (!req.user) {
         return res.status(401).json({ msg: "Utilisateur non authentifié." });
       }
@@ -441,6 +437,30 @@ const UserController = {
     } catch (err) {
       console.error(err.message);
       res.status(500).send('Server error');
+    }
+  },
+
+  getUserByID: async (req, res) => {
+    try {
+      // Récupérer l'ID depuis les paramètres de la requête
+      const userId = req.params.id;
+  
+      // Vérifier si l'ID est fourni
+      if (!userId) {
+        return res.status(400).json({ msg: "ID utilisateur requis." });
+      }
+  
+      // Rechercher l'utilisateur, exclure les champs sensibles
+      const user = await User.findById(userId).select('-password -code');
+  
+      if (!user) {
+        return res.status(404).json({ msg: "Utilisateur introuvable." });
+      }
+  
+      return res.status(200).json(user);
+    } catch (err) {
+      console.error("Erreur lors de la récupération de l'utilisateur:", err);
+      return res.status(500).json({ msg: "Erreur serveur." });
     }
   }
 };

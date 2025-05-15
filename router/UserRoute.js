@@ -14,4 +14,7 @@ router.post('/resend-code',UserController.reSendCode);
 router.post('/activate-code',UserController.activateWithCode);
 router.get('/me', auth, UserController.getCurrentUser);
 
+
+router.get('/user/:id', auth,UserController.getUserByID);
+//('/user/:id', userController.getUser);
 module.exports = router;

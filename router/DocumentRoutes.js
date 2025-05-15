@@ -45,8 +45,19 @@ router.post('/verifypdf',upload.single('document'), DocumentC.VerifyPdf);
 router.post('/verif',upload.single('file'), DocumentC.verification);
 
 router.post('/verifyqr',upload.single('file'), DocumentC.verifyPdfWithQRCode);
+///api/document/sign-document sign-pending-document
+router.post('/sign-document', auth, upload.single('file'), DocumentC.newDocumentSign);
+router.get('/user-signed', auth, DocumentC.getUserUploadedOrSignedDocuments);
 
-router.get('/documents',auth,DocumentC.getDocuments);
+router.post('/pending-document', auth, DocumentC.addWaitingDocument);
+router.get('/pending', auth, DocumentC.getPendingDocuments);
+
+router.post('/sign-pending-document/:id', auth, DocumentC.signPendingDocument);
+
+
+router.get('/institution-documents',auth,DocumentC.getInstitutionDocuments);
+router.post('/:id/reject',auth,DocumentC.rejectDocument);
+
 module.exports = router;
 
 // routes/document.routes.js

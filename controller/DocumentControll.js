@@ -813,6 +813,382 @@ DocumentDetails: async (req, res) => {
   }
 },
 
+newDocumentSign: async (req, res) => {
+  try {
+    const {
+      hashOriginal,
+      signatureOriginal,
+      hashSignedDocument,
+      signatureSigned,
+      uniqueId,
+      publicKey,
+      certificate,
+      file, // base64 string
+      signBy,
+      uploadedBy,
+      positionQrcode,
+      institutionId,
+      titre,
+      positionType
+    } = req.body;
+
+   
+
+    const existingDoc = await Document.findOne({ qrContent: uniqueId });
+    if (existingDoc) {
+      return res.status(409).json({
+        error: "Un document avec ce identifiant existe déjà. Veuillez réessayer.",
+      });
+    }
+
+    // Vérification si un document existe déjà avec le même hash ou signature
+    const existingDocument = await Document.findOne({
+      $or: [
+        { hashOriginal: hashOriginal },
+        { signedHashOriginal: signatureOriginal }
+      ]
+    });
+
+    // Si le document existe déjà, on rejette la demande avec une erreur
+    if (existingDocument) {
+      return res.status(409).json({
+        error: 'Le document a déjà été signé avec cette signature.',
+        document: existingDocument
+      });
+    }
+
+    // Decode le fichier PDF depuis base64
+    const buffer = Buffer.from(file, 'base64');
+
+    // Emplacement du dossier pour sauvegarder le fichier
+    const uploadDir = path.join(__dirname, '../uploads/documents/');
+    
+    // Vérifier si le dossier existe, sinon le créer
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    // Nom et chemin du fichier signé
+    const fileName = `signed-${Date.now()}.pdf`;
+    const filePath = path.join(uploadDir, fileName);
+
+    // Enregistrer le fichier PDF signé sur le disque
+    fs.writeFileSync(filePath, buffer);
+
+    // Créer un nouveau document dans la base de données
+    const newDoc = new Document({
+      title: `${titre}`.toUpperCase(),
+      institution: institutionId, // Prend l'institution de la requête
+      StaffName: 'None', // Ou extraire depuis `signBy`
+      fileSize: `${Math.round(buffer.length / 1024)} KB`,
+      filePath: filePath,
+      status: 'signed',
+      qrCodePosition: positionQrcode,
+      originalHash: hashOriginal,
+     // signedHashOriginal: signatureOriginal,
+      HashSigned: hashSignedDocument,
+      signedDocument: signatureSigned,
+      qrContent: uniqueId,
+      qrPositionType: positionType,
+      qrSignatureInfo: {
+        signedBy: signBy,
+        signedAt: new Date(),
+        signatureHash: signatureSigned,
+        publicKey: publicKey,
+        qrContent: uniqueId
+      },
+      uploadedBy,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      history: [
+        {
+          action: 'signed',
+          actor: signBy,
+          timestamp: new Date(),
+          comment: 'Document signé par système'
+        }
+      ]
+    });
+
+    // Sauvegarder le nouveau document dans la base de données
+    await newDoc.save();
+
+    res.status(201).json({
+      message: 'Document signé enregistré avec succès',
+      document: newDoc
+    });
+  } catch (err) {
+    console.error('Erreur signature document :', err);
+    res.status(500).json({ error: 'Erreur lors de l’enregistrement du document signé' });
+  }
+},
+
+getUserUploadedOrSignedDocuments: async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const docs = await Document.find({
+      $or: [
+        { 'qrSignatureInfo.signedBy': userId },
+        { uploadedBy: userId }
+      ]
+    }).sort({ createdAt: -1 });
+
+    res.status(200).json(docs);
+  } catch (err) {
+    console.error('Erreur récupération documents :', err);
+    res.status(500).json({ error: 'Erreur serveur lors de la récupération des documents.' });
+  }
+},
+
+signPendingDocument: async (req, res) => {
+  try {
+    const documentId = req.params.id;
+    const { 
+      signatureSigned,
+      uniqueId,
+      publicKey,
+      file, // Base64 encoded PDF
+    } = req.body;
+
+    // Find the document by ID
+    const document = await Document.findById(documentId);
+    
+    if (!document) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+
+    // Verify document is in "prepared" status
+    if (document.status !== 'pending') {
+      return res.status(400).json({ 
+        message: `Document cannot be signed because it is in "${document.status}" status. Only "pending" documents can be signed.` 
+      });
+    }
+
+    // Get file path to save the signed document
+    const uploadsDir = path.join(__dirname, '../uploads/documents');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    // Create a unique filename for the signed document
+    const originalFilename = path.basename(document.filePath);
+    const signedFilename = `signed-${Date.now()}-${originalFilename}`;
+    const signedFilePath = path.join(uploadsDir, signedFilename);
+
+    // Convert base64 to file and save it
+    const base64Data = file.replace(/^data:application\/pdf;base64,/, '');
+    fs.writeFileSync(signedFilePath, Buffer.from(base64Data, 'base64'));
+
+    // Update document with signature information
+    document.status = 'signed';
+    document.signatureSigned = signatureSigned;
+    document.signedDocument = `/uploads/signed/${signedFilename}`;
+    document.qrContent = uniqueId;
+    document.filePath = signedFilePath;
+    document.qrSignatureInfo = {
+      signedBy: req.user._id,
+      signedAt: new Date(),
+      signatureHash: signatureSigned,
+      publicKey: publicKey,
+      qrInnerContent: JSON.stringify({ uniqueId })
+    };
+    document.updatedAt = new Date();
+
+    // Add to history
+    document.history.push({
+      action: 'signed',
+      actor: req.user._id,
+      timestamp: new Date(),
+      comment: 'Document signed via digital certificate'
+    });
+
+    await document.save();
+
+    res.status(200).json({
+      message: 'Document signed successfully',
+      document: {
+        id: document._id,
+        title: document.title,
+        status: document.status,
+        signedAt: document.qrSignatureInfo.signedAt
+      }
+    });
+  } catch (error) {
+    console.error('Error signing document:', error);
+    res.status(500).json({ message: 'Server error while signing document', error: error.message });
+  }
+},
+
+
+
+
+ addWaitingDocument:async (req, res) => {
+  try {
+    const {
+      file, // base64 du PDF original
+      uploadedBy,
+      institutionId,
+      titre,
+      hashOriginal,
+      positionQrcode,
+      positionType
+    } = req.body;
+    console.log('addWaitingDocument:', req.body);
+
+    // Vérifier si un document avec ce hashOriginal est déjà en attente
+    const existing = await Document.findOne({
+      originalHash: hashOriginal,
+     
+    });
+
+    console.log(' Document waiting list:');
+    if (existing) {
+      return res.status(409).json({
+        error: 'Ce document est déjà en attente de signature.',
+        document: existing
+      });
+    }
+
+    // Convertir le PDF base64 en buffer
+    const buffer = Buffer.from(file, 'base64');
+
+    // Dossier de destination
+    const uploadDir = path.join(__dirname, '../uploads/pending/');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const fileName = `pending-${Date.now()}.pdf`;
+    const filePath = path.join(uploadDir, fileName);
+    fs.writeFileSync(filePath, buffer);
+
+    // Création du document
+    const newDoc = new Document({
+      title: `${titre}`.toUpperCase(),
+      institution: institutionId,
+      fileSize: `${Math.round(buffer.length / 1024)} KB`,
+      filePath: filePath,
+      status: 'pending',
+      StaffName: 'None', // Ou extraire depuis `signBy`
+
+      qrCodePosition: positionQrcode,
+      qrPositionType: positionType,
+      originalHash: hashOriginal,
+      uploadedBy,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      history: [
+        {
+          action: 'uploaded',
+          actor: uploadedBy,
+          timestamp: new Date(),
+          comment: 'Document mis en attente de signature',
+        }
+      ]
+    });
+
+    await newDoc.save();
+
+    return res.status(201).json({
+      message: 'Document en attente ajouté avec succès.',
+      document: newDoc
+    });
+
+  } catch (error) {
+    console.error('Erreur addWaitingDocument:', error);
+    return res.status(500).json({
+      error: "Erreur lors de l'enregistrement du document en attente"
+    });
+  }
+},
+
+getPendingDocuments: async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Récupérer l'institution du user
+    const user = await User.findById(userId).populate('institution');
+    if (!user || !user.institution) {
+      return res.status(404).json({ message: "Institution non trouvée" });
+    }
+
+    // Récupérer uniquement les documents en attente
+    const pendingDocuments = await Document.find({
+      institution: user.institution._id,
+      status: 'pending'
+    })
+      .populate({ path: 'uploadedBy', select: 'name email' });
+
+    res.json(pendingDocuments);
+  } catch (error) {
+    console.error("Erreur lors de la récupération des documents en attente :", error);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+},
+
+
+getInstitutionDocuments: async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await User.findById(userId).populate('institution');
+    if (!user || !user.institution) {
+      return res.status(404).json({ message: "Institution non trouvée" });
+    }
+
+    const documents = await Document.find({ institution: user.institution._id })
+      .populate({ path: 'qrSignatureInfo.signedBy', select: 'name email' })
+      .populate({ path: 'uploadedBy', select: 'name email' });
+
+    res.json(documents);
+  } catch (error) {
+    console.error("Erreur lors de la récupération :", error);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+},
+
+
+rejectDocument: async (req, res) => {
+  const { id } = req.params;
+  const { reason,} = req.body;
+
+  console.log("Rejet du document avec ID:", id);
+  try {
+    const document = await Document.findById(id);
+    if (!document) {
+      return res.status(409).json({ message: "Document introuvable." });
+    }
+
+    if (document.status === 'signed') {
+      return res.status(400).json({ message: "Impossible de rejeter un document déjà signé." });
+    }
+
+    // Mise à jour du statut
+    document.status = 'rejected';
+    document.rejection = {
+      rejectedBy: req.user._id,
+      reason: reason || 'Aucune raison spécifiée',
+      rejectedAt: new Date()
+    };
+
+    // Historique
+    document.history.push({
+      action: 'rejected',
+      actor: req.user._id,
+      comment: reason,
+    });
+
+    await document.save();
+
+    return res.status(200).json({ message: "Document rejeté avec succès." });
+  } catch (error) {
+    console.error("Erreur lors du rejet du document:", error);
+    return res.status(500).json({ message: "Erreur serveur." });
+  }
+},
+
+
 };
 
 module.exports = DocumentController;

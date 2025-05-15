@@ -987,7 +987,7 @@ signPendingDocument: async (req, res) => {
     document.qrContent = uniqueId;
     document.filePath = signedFilePath;
     document.qrSignatureInfo = {
-      signedBy: req.user._id,
+      signedBy: req.user.id,
       signedAt: new Date(),
       signatureHash: signatureSigned,
       publicKey: publicKey,
@@ -1071,7 +1071,7 @@ signPendingDocument: async (req, res) => {
       filePath: filePath,
       status: 'pending',
       StaffName: 'None', // Ou extraire depuis `signBy`
-
+    
       qrCodePosition: positionQrcode,
       qrPositionType: positionType,
       originalHash: hashOriginal,
